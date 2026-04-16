@@ -1,37 +1,23 @@
 import React from 'react';
-import { cookies } from 'next/headers';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { jwtVerify } from 'jose';
 import Sidebar from '@/components/admin/Sidebar';
-
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'your-secret-key'
-);
 
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const token = cookies().get('auth_token')?.value;
+  const headersList = headers();
+  const userJson = headersList.get('x-user');
 
-  if (!token) {
+  if (!userJson) {
     redirect('/login');
   }
 
   let user = null;
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    user = {
-      username: payload.username as string,
-      role: payload.role as string,
-    };
-
-    // Global role check for entire /admin section
-    const allowedRoles = ['admin', 'manager', 'staff'];
-    if (!allowedRoles.includes(user.role)) {
-      redirect('/403');
-    }
+    user = JSON.parse(userJson);
   } catch (error) {
     redirect('/login');
   }

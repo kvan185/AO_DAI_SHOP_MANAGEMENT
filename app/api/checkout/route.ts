@@ -8,7 +8,9 @@ const JWT_SECRET = new TextEncoder().encode(
 );
 
 export async function POST(req: Request) {
-    const token = cookies().get('auth_token')?.value;
+    const { searchParams } = new URL(req.url);
+    const sid = searchParams.get('sid');
+    const token = cookies().get(sid ? `auth_token_s${sid}` : 'auth_token')?.value;
     let userId = null;
 
     if (token) {
@@ -36,22 +38,34 @@ export async function POST(req: Request) {
 
         // 2. Create order items and Update Stock
         for (const item of items) {
-            // Check stock first
-            const [productRows]: any = await connection.query('SELECT stock FROM products WHERE id = ? FOR UPDATE', [item.id]);
-            if (productRows.length === 0 || productRows[0].stock < item.quantity) {
-                throw new Error(`Sản phẩm ${item.name} không đủ hàng trong kho.`);
+            if (item.variantId) {
+                // Check variant stock
+                const [varRows]: any = await connection.query('SELECT stock FROM product_variants WHERE id = ? FOR UPDATE', [item.variantId]);
+                if (varRows.length === 0 || varRows[0].stock < item.quantity) {
+                    throw new Error(`Sản phẩm ${item.name} (biến thể) không đủ hàng trong kho.`);
+                }
+                // Update variant stock
+                await connection.query(
+                    'UPDATE product_variants SET stock = stock - ? WHERE id = ?',
+                    [item.quantity, item.variantId]
+                );
+            } else {
+                // Check main product stock
+                const [productRows]: any = await connection.query('SELECT stock FROM products WHERE id = ? FOR UPDATE', [item.id]);
+                if (productRows.length === 0 || productRows[0].stock < item.quantity) {
+                    throw new Error(`Sản phẩm ${item.name} không đủ hàng trong kho.`);
+                }
+                // Update main product stock
+                await connection.query(
+                    'UPDATE products SET stock = stock - ? WHERE id = ?',
+                    [item.quantity, item.id]
+                );
             }
 
             // Insert item
             await connection.query(
                 'INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)',
-                [orderId, item.id, item.quantity, item.price]
-            );
-
-            // Update product stock
-            await connection.query(
-                'UPDATE products SET stock = stock - ? WHERE id = ?',
-                [item.quantity, item.id]
+                [orderId, item.id, item.quantity, item.price] // in the future, maybe add variant_id to order_items
             );
         }
 

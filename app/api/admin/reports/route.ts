@@ -1,7 +1,13 @@
-import { NextResponse } from 'next/server';
+import { authorize } from '@/lib/auth';
 import pool from '@/lib/db';
+import { NextResponse } from 'next/server';
 
 export async function GET(req: Request) {
+    const { searchParams } = new URL(req.url);
+    const sid = searchParams.get('sid');
+    const { errorResponse } = await authorize(['admin', 'manager'], sid);
+    if (errorResponse) return errorResponse;
+    
     try {
         const { searchParams } = new URL(req.url);
         const startDate = searchParams.get('startDate');

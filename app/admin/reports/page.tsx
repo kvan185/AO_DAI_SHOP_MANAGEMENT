@@ -9,8 +9,10 @@ import {
   Hash
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { useSession } from '@/hooks/useSession';
 
 export default function AdminReports() {
+  const { sid } = useSession();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   
@@ -21,7 +23,8 @@ export default function AdminReports() {
   const fetchReport = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/reports?startDate=${startDate}&endDate=${endDate}`);
+      const q = sid ? `&sid=${sid}` : '';
+      const res = await fetch(`/api/admin/reports?startDate=${startDate}&endDate=${endDate}${q}`);
       const json = await res.json();
       setData(json);
     } catch (e) {
@@ -33,7 +36,7 @@ export default function AdminReports() {
 
   useEffect(() => {
     fetchReport();
-  }, []);
+  }, [sid]);
 
   const handleExport = () => {
       // Basic CSV export logic

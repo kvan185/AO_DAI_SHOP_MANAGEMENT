@@ -6,23 +6,23 @@ const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || 'your-secret-key'
 );
 
-export async function GET() {
-  const token = cookies().get('auth_token')?.value;
+import { getAuthUser } from '@/lib/auth';
 
-  if (!token) {
-    return NextResponse.json({ authenticated: false }, { status: 401 });
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const sid = searchParams.get('sid');
+  
+  const user = await getAuthUser(sid);
+
+  if (!user) {
+    return NextResponse.json({ authenticated: false }, { status: 200 });
   }
 
-  try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    return NextResponse.json({
-      authenticated: true,
-      user: {
-        username: payload.username,
-        role: payload.role,
-      },
-    });
-  } catch (error) {
-    return NextResponse.json({ authenticated: false }, { status: 401 });
-  }
+  return NextResponse.json({
+    authenticated: true,
+    user: {
+      username: user.username,
+      role: user.role,
+    },
+  });
 }

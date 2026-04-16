@@ -1,29 +1,15 @@
-import { NextResponse } from 'next/server';
+import { authorize } from '@/lib/auth';
 import pool from '@/lib/db';
 import { writeFile, mkdir, unlink } from 'fs/promises';
 import path from 'path';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'your-secret-key'
-);
-
-async function checkPermission() {
-    const token = cookies().get('auth_token')?.value;
-    if (!token) return false;
-    try {
-        const { payload } = await jwtVerify(token, JWT_SECRET);
-        return ['admin', 'manager'].includes(payload.role as string);
-    } catch {
-        return false;
-    }
-}
+import { NextResponse } from 'next/server';
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
-    if (!(await checkPermission())) {
-        return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
-    }
+    const { searchParams } = new URL(req.url);
+    const sid = searchParams.get('sid');
+    const { errorResponse } = await authorize(['admin', 'manager', 'staff'], sid);
+    if (errorResponse) return errorResponse;
+    
     try {
         const { id } = params;
         const [rows]: any = await pool.query('SELECT * FROM products WHERE id = ?', [id]);
@@ -31,11 +17,19 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
             return NextResponse.json({ message: 'Sản phẩm không tồn tại' }, { status: 404 });
         }
         
-        const [images]: any = await pool.query('SELECT * FROM product_images WHERE product_id = ? ORDER BY display_order ASC, created_at ASC', [id]);
+        // Return images with is_primary = 1 first
+        const [images]: any = await pool.query(
+            'SELECT * FROM product_images WHERE product_id = ? ORDER BY is_primary DESC, display_order ASC, created_at ASC', 
+            [id]
+        );
+
+        // Fetch variants
+        const [variants]: any = await pool.query('SELECT * FROM product_variants WHERE product_id = ?', [id]);
         
         return NextResponse.json({ 
             product: rows[0],
-            images: images
+            images: images,
+            variants: variants
         });
     } catch (error) {
         return NextResponse.json({ message: 'Internal Server Error' }, { status: 500 });
@@ -43,9 +37,10 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 }
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
-    if (!(await checkPermission())) {
-        return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
-    }
+    const { searchParams } = new URL(req.url);
+    const sid = searchParams.get('sid');
+    const { errorResponse } = await authorize(['admin', 'manager', 'staff'], sid);
+    if (errorResponse) return errorResponse;
     const connection = await pool.getConnection();
     try {
         const { id } = params;
@@ -61,6 +56,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         const description = formData.get('description') as string;
         const stock = parseInt(formData.get('stock') as string || '0');
         const is_active = formData.get('is_active') === 'true';
+        const variants_str = formData.get('variants') as string;
+        const variants = variants_str ? JSON.parse(variants_str) : [];
         
         // --- Server-side Validation ---
         if (!name || name.trim() === '') {
@@ -73,7 +70,6 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
             return NextResponse.json({ message: 'Giá khuyến mãi phải nhỏ hơn giá gốc' }, { status: 400 });
         }
 
-        // Robust array parsing
         const newImages = formData.getAll('new_images') as File[];
         const deleteImageIds = (formData.get('delete_image_ids') as string || '')
             .split(',')
@@ -81,11 +77,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
             .map(id => parseInt(id))
             .filter(id => !isNaN(id));
 
-        const sortedImageIds = (formData.get('sorted_image_ids') as string || '')
-            .split(',')
-            .filter(Boolean)
-            .map(id => parseInt(id))
-            .filter(id => !isNaN(id));
+        const primaryImageId = formData.get('primary_image_id') ? parseInt(formData.get('primary_image_id') as string) : null;
 
         await connection.beginTransaction();
 
@@ -113,8 +105,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
         // 3. Handle deletions
         for (const imgId of deleteImageIds) {
-            const [rows]: any = await connection.query('SELECT image_path FROM product_images WHERE id = ? AND product_id = ?', [imgId, id]);
+            const [rows]: any = await connection.query('SELECT image_path, is_primary FROM product_images WHERE id = ? AND product_id = ?', [imgId, id]);
             if (rows.length > 0) {
+                const isPrimaryToDelete = rows[0].is_primary;
                 const imgPath = rows[0].image_path;
                 try {
                     await unlink(path.join(process.cwd(), 'public', imgPath));
@@ -122,67 +115,131 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
                     console.error('File cleanup error:', e);
                 }
                 await connection.query('DELETE FROM product_images WHERE id = ?', [imgId]);
+
+                // If we deleted the primary image, we need to pick a new one
+                if (isPrimaryToDelete) {
+                    await connection.query(
+                        'UPDATE product_images SET is_primary = 1 WHERE product_id = ? ORDER BY id ASC LIMIT 1',
+                        [id]
+                    );
+                }
             }
         }
 
         // 4. Handle new uploads
-        const uploadDir = path.join(process.cwd(), 'public/uploads/products');
-        await mkdir(uploadDir, { recursive: true });
+        if (newImages.length > 0) {
+            const uploadDir = path.join(process.cwd(), 'public/uploads/products');
+            await mkdir(uploadDir, { recursive: true });
 
-        const [orderRows]: any = await connection.query('SELECT MAX(display_order) as maxOrder FROM product_images WHERE product_id = ?', [id]);
-        let nextOrder = (orderRows[0].maxOrder || 0) + 1;
+            const [orderRows]: any = await connection.query('SELECT MAX(display_order) as maxOrder FROM product_images WHERE product_id = ?', [id]);
+            let nextOrder = (orderRows[0].maxOrder || 0) + 1;
 
-        for (let i = 0; i < newImages.length; i++) {
-            const file = newImages[i];
-            if (file.size === 0) continue;
+            for (let i = 0; i < newImages.length; i++) {
+                const file = newImages[i];
+                if (file.size === 0) continue;
 
-            const bytes = await file.arrayBuffer();
-            const buffer = Buffer.from(bytes);
-            const filename = `${Date.now()}-${i}-${file.name.replace(/\s+/g, '_')}`;
-            const filePath = path.join(uploadDir, filename);
-            const relativePath = `/uploads/products/${filename}`;
-            
-            await writeFile(filePath, buffer);
-            await connection.query(
-                'INSERT INTO product_images (product_id, image_path, is_primary, display_order) VALUES (?, ?, ?, ?)',
-                [id, relativePath, false, nextOrder++]
-            );
-        }
-
-        // 5. Update display order and primary status
-        if (sortedImageIds.length > 0) {
-            for (let i = 0; i < sortedImageIds.length; i++) {
-                const imgId = sortedImageIds[i];
-                const isPrimary = i === 0;
+                const bytes = await file.arrayBuffer();
+                const buffer = Buffer.from(bytes);
+                const filename = `${Date.now()}-${i}-${file.name.replace(/\s+/g, '_')}`;
+                const filePath = path.join(uploadDir, filename);
+                const relativePath = `/uploads/products/${filename}`;
+                
+                await writeFile(filePath, buffer);
                 await connection.query(
-                    'UPDATE product_images SET display_order = ?, is_primary = ? WHERE id = ? AND product_id = ?',
-                    [i, isPrimary, imgId, id]
+                    'INSERT INTO product_images (product_id, image_path, is_primary, display_order) VALUES (?, ?, ?, ?)',
+                    [id, relativePath, 0, nextOrder++]
                 );
             }
-        } else {
-            // Check if any primary exists
-            const [primaryCount]: any = await connection.query('SELECT id FROM product_images WHERE product_id = ? AND is_primary = TRUE', [id]);
-            if (primaryCount.length === 0) {
-                await connection.query('UPDATE product_images SET is_primary = TRUE WHERE product_id = ? ORDER BY display_order ASC LIMIT 1', [id]);
-            }
+        }
+
+        // 5. Update Primary Status if requested
+        if (primaryImageId) {
+            await connection.query('UPDATE product_images SET is_primary = 0 WHERE product_id = ?', [id]);
+            await connection.query('UPDATE product_images SET is_primary = 1 WHERE id = ? AND product_id = ?', [primaryImageId, id]);
+        }
+
+        // 6. Handle Variants
+        // Delete existing and insert new (Full sync model)
+        await connection.query('DELETE FROM product_variants WHERE product_id = ?', [id]);
+        for (const v of variants) {
+            // Chuyển SKU rỗng thành null để tránh lỗi Duplicate entry trong DB
+            const variantSku = (v.sku && v.sku.trim() !== '') ? v.sku.trim() : null;
+            
+            await connection.query(
+                'INSERT INTO product_variants (product_id, size, color, sku, stock, price_override) VALUES (?, ?, ?, ?, ?, ?)',
+                [id, v.size, v.color, variantSku, v.stock || 0, v.price_override || null]
+            );
         }
 
         await connection.commit();
         return NextResponse.json({ message: 'Cập nhật thành công' });
 
     } catch (error) {
-        await connection.rollback();
+        if (connection) await connection.rollback();
         console.error('Update Detail Error:', error);
         return NextResponse.json({ message: 'Lỗi máy chủ: ' + (error as Error).message }, { status: 500 });
     } finally {
-        connection.release();
+        if (connection) connection.release();
+    }
+}
+
+// Separate PATCH for handling image status changes (Primary selection)
+export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+    const { searchParams } = new URL(req.url);
+    const sid = searchParams.get('sid');
+    const { errorResponse } = await authorize(['admin', 'manager', 'staff'], sid);
+    if (errorResponse) return errorResponse;
+    const connection = await pool.getConnection();
+    try {
+        const { id } = params;
+        const { action, image_id } = await req.json();
+
+        if (action === 'set_primary') {
+            await connection.beginTransaction();
+            // Reset all
+            await connection.query('UPDATE product_images SET is_primary = 0 WHERE product_id = ?', [id]);
+            // Set new primary
+            const [result]: any = await connection.query(
+                'UPDATE product_images SET is_primary = 1 WHERE id = ? AND product_id = ?',
+                [image_id, id]
+            );
+
+            if (result.affectedRows === 0) {
+                await connection.rollback();
+                return NextResponse.json({ message: 'Ảnh không đúng hoặc không tồn tại' }, { status: 404 });
+            }
+
+            await connection.commit();
+            return NextResponse.json({ message: 'Đã đặt làm ảnh chính' });
+        }
+
+        if (action === 'reorder') {
+            const { image_ids } = await req.json(); // Array of image IDs in new order
+            await connection.beginTransaction();
+            for (let i = 0; i < image_ids.length; i++) {
+                await connection.query(
+                    'UPDATE product_images SET display_order = ? WHERE id = ? AND product_id = ?',
+                    [i, image_ids[i], id]
+                );
+            }
+            await connection.commit();
+            return NextResponse.json({ message: 'Đã cập nhật thứ tự hình ảnh' });
+        }
+
+        return NextResponse.json({ message: 'Hành động không hợp lệ' }, { status: 400 });
+    } catch (error) {
+        if (connection) await connection.rollback();
+        return NextResponse.json({ message: 'Lỗi internal server' }, { status: 500 });
+    } finally {
+        if (connection) connection.release();
     }
 }
 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
-    if (!(await checkPermission())) {
-        return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
-    }
+    const { searchParams } = new URL(req.url);
+    const sid = searchParams.get('sid');
+    const { errorResponse } = await authorize(['admin', 'manager'], sid);
+    if (errorResponse) return errorResponse;
     const connection = await pool.getConnection();
     try {
         const { id } = params;
@@ -199,9 +256,9 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
         await connection.commit();
         return NextResponse.json({ message: 'Đã xóa vĩnh viễn' });
     } catch (error) {
-        await connection.rollback();
+        if (connection) await connection.rollback();
         return NextResponse.json({ message: 'Internal Server Error' }, { status: 500 });
     } finally {
-        connection.release();
+        if (connection) connection.release();
     }
 }

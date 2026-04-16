@@ -7,8 +7,10 @@ const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || 'your-secret-key'
 );
 
-export async function GET() {
-    const token = cookies().get('auth_token')?.value;
+export async function GET(req: Request) {
+    const { searchParams } = new URL(req.url);
+    const sid = searchParams.get('sid');
+    const token = cookies().get(sid ? `auth_token_s${sid}` : 'auth_token')?.value;
     if (!token) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
     try {

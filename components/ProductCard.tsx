@@ -17,9 +17,10 @@ export default function ProductCard({ product }: { product: any }) {
     <div className="group bg-white rounded-2xl shadow-md overflow-hidden hover:shadow-2xl transition-all duration-500 flex flex-col h-full border border-gray-100">
       <Link href={`/product/${product.id}`} className="relative h-80 overflow-hidden">
         <img 
-          src={product.image_path || product.image_url || 'https://via.placeholder.com/400x600'} 
+          src={product.image_path || product.image_url || '/no-image.jpg'} 
           alt={product.name} 
           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+          onError={(e: any) => { e.target.src = '/no-image.jpg' }}
         />
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all"></div>
         {product.stock <= 0 && (

@@ -8,8 +8,10 @@ import {
   X
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { useSession } from '@/hooks/useSession';
 
 export default function AdminCategories() {
+  const { sid } = useSession();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -27,6 +29,7 @@ export default function AdminCategories() {
     try {
       const q = new URLSearchParams();
       if (search) q.append('search', search);
+      if (sid) q.append('sid', sid);
       const res = await fetch(`/api/admin/categories?${q.toString()}`);
       const data = await res.json();
       setCategories(data.categories || []);
@@ -39,13 +42,14 @@ export default function AdminCategories() {
 
   useEffect(() => {
     fetchCategories();
-  }, [search]);
+  }, [search, sid]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const q = sid ? `?sid=${sid}` : '';
     const url = editingCategory 
-      ? `/api/admin/categories/${editingCategory.id}` 
-      : '/api/admin/categories';
+      ? `/api/admin/categories/${editingCategory.id}${q}` 
+      : `/api/admin/categories${q}`;
     const method = editingCategory ? 'PUT' : 'POST';
 
     try {
@@ -73,7 +77,8 @@ export default function AdminCategories() {
     if (!confirm('Bạn có chắc chắn muốn xóa danh mục này?')) return;
 
     try {
-      const res = await fetch(`/api/admin/categories/${id}`, { method: 'DELETE' });
+      const q = sid ? `?sid=${sid}` : '';
+      const res = await fetch(`/api/admin/categories/${id}${q}`, { method: 'DELETE' });
       const data = await res.json();
 
       if (res.ok) {

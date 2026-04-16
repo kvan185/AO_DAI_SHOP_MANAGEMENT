@@ -42,7 +42,7 @@ export default function ProductGallery({ images, productName }: ProductGalleryPr
     setZoomStyle({ display: 'none', transformOrigin: 'center' });
   };
 
-  const placeholderImg = "https://images.unsplash.com/photo-1617627143750-d86bc21e42bb?q=80&w=1000&auto=format&fit=crop";
+  const placeholderImg = "/no-image.jpg";
 
   return (
     <div className="space-y-8 animate-in fade-in zoom-in-95 duration-1000">

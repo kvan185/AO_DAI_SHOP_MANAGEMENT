@@ -1,28 +1,14 @@
-import { NextResponse } from 'next/server';
+import { authorize } from '@/lib/auth';
 import pool from '@/lib/db';
 import { slugify } from '@/lib/utils';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'your-secret-key'
-);
-
-async function checkPermission() {
-    const token = cookies().get('auth_token')?.value;
-    if (!token) return false;
-    try {
-        const { payload } = await jwtVerify(token, JWT_SECRET);
-        return ['admin', 'manager'].includes(payload.role as string);
-    } catch {
-        return false;
-    }
-}
+import { NextResponse } from 'next/server';
 
 export async function GET(req: Request) {
-    if (!(await checkPermission())) {
-        return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
-    }
+    const { searchParams } = new URL(req.url);
+    const sid = searchParams.get('sid');
+    const { errorResponse } = await authorize(['admin', 'manager'], sid);
+    if (errorResponse) return errorResponse;
+    
     try {
         const { searchParams } = new URL(req.url);
         const search = searchParams.get('search') || '';
@@ -38,9 +24,10 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-    if (!(await checkPermission())) {
-        return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
-    }
+    const { searchParams } = new URL(req.url);
+    const sid = searchParams.get('sid');
+    const { errorResponse } = await authorize(['admin', 'manager'], sid);
+    if (errorResponse) return errorResponse;
     try {
         const { name, description } = await req.json();
         

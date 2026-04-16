@@ -7,38 +7,64 @@ const JWT_SECRET = new TextEncoder().encode(
 );
 
 export async function middleware(req: NextRequest) {
-  const token = req.cookies.get('auth_token')?.value;
-  const { pathname } = req.nextUrl;
+  const { pathname, searchParams } = req.nextUrl;
+  const sid = searchParams.get('sid');
+  
+  const cookieName = sid ? `auth_token_s${sid}` : 'auth_token';
+  const token = req.cookies.get(cookieName)?.value;
 
-  // Paths that require authentication and specific roles
-  const protectedPaths = [
-    { path: '/admin/products', roles: ['admin', 'manager', 'staff'] },
-    { path: '/admin/orders', roles: ['admin', 'manager', 'staff'] },
-    { path: '/admin/users', roles: ['admin', 'manager'] },
-    { path: '/admin/reports', roles: ['admin', 'manager'] },
-    { path: '/admin', roles: ['admin', 'manager'] }, // Overview dashboard
-    { path: '/profile', roles: ['admin', 'manager', 'staff', 'customer'] },
-    { path: '/orders', roles: ['admin', 'manager', 'staff', 'customer'] },
+  // Configuration for protected routes
+  const authConfig = [
+    { prefix: '/admin/users', roles: ['admin', 'manager'] },
+    { prefix: '/admin/reports', roles: ['admin', 'manager'] },
+    { prefix: '/admin/stats', roles: ['admin', 'manager'] },
+    { prefix: '/admin/products', roles: ['admin', 'manager', 'staff'] },
+    { prefix: '/admin/orders', roles: ['admin', 'manager', 'staff'] },
+    { prefix: '/admin/categories', roles: ['admin', 'manager'] },
+    { prefix: '/admin/coupons', roles: ['admin', 'manager'] },
+    { prefix: '/admin', roles: ['admin', 'manager', 'staff'] }, // Dashboard needs staff access for order stats
+    { prefix: '/profile', roles: ['admin', 'manager', 'staff', 'customer'] },
+    { prefix: '/orders', roles: ['admin', 'manager', 'staff', 'customer'] },
   ];
 
-  const matchedPath = protectedPaths.find((p) => pathname.startsWith(p.path));
+  const matched = authConfig.find(c => pathname.startsWith(c.prefix));
 
-  if (matchedPath) {
+  if (matched) {
     if (!token) {
-      return NextResponse.redirect(new URL('/login', req.url));
+      const url = new URL('/login', req.url);
+      url.searchParams.set('callbackUrl', pathname);
+      if (sid) url.searchParams.set('sid', sid);
+      return NextResponse.redirect(url);
     }
 
     try {
       const { payload } = await jwtVerify(token, JWT_SECRET);
       const userRole = payload.role as string;
 
-      if (!matchedPath.roles.includes(userRole)) {
-        // Redirect to 403 or home if role is not allowed
-        return NextResponse.redirect(new URL('/403', req.url));
+      if (!matched.roles.includes(userRole)) {
+        // Redirect to login if role is unauthorized for this path
+        const url = new URL('/login', req.url);
+        url.searchParams.set('unauthorized', 'true');
+        if (sid) url.searchParams.set('sid', sid);
+        return NextResponse.redirect(url);
       }
-    } catch (error) {
-      // Token invalid or expired
-      return NextResponse.redirect(new URL('/login', req.url));
+      const requestHeaders = new Headers(req.headers);
+      requestHeaders.set('x-user', JSON.stringify(payload));
+
+      return NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      });
+    } catch (error: any) {
+      // Token expired or invalid
+      console.error('Middleware JWT Error:', error.message, 'Token:', token);
+      const url = new URL('/login', req.url);
+      url.searchParams.set('callbackUrl', pathname);
+      if (sid) url.searchParams.set('sid', sid);
+      const response = NextResponse.redirect(url);
+      response.cookies.delete(cookieName);
+      return response;
     }
   }
 

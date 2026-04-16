@@ -7,7 +7,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 export async function POST(req: Request) {
     try {
-        const { username, password } = await req.json();
+        const { username, password, sid } = await req.json();
 
         if (!username || !password) {
             return NextResponse.json({ message: 'Missing fields' }, { status: 400 });
@@ -38,10 +38,13 @@ export async function POST(req: Request) {
         // Set Cookie
         const response = NextResponse.json({ 
             message: 'Login successful', 
-            user: { id: user.id, username: user.username, role: user.role }
+            user: { id: user.id, username: user.username, role: user.role },
+            sid: sid // Return sid to confirm
         }, { status: 200 });
 
-        response.cookies.set('auth_token', token, {
+        const cookieName = sid ? `auth_token_s${sid}` : 'auth_token';
+
+        response.cookies.set(cookieName, token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',

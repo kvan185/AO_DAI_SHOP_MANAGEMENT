@@ -14,6 +14,8 @@ import {
   Layers
 } from 'lucide-react';
 
+import { useSession } from '@/hooks/useSession';
+
 interface SidebarProps {
   user: {
     username: string;
@@ -23,6 +25,7 @@ interface SidebarProps {
 
 export default function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
+  const { sid, sessionUrl } = useSession();
   const [isOpen, setIsOpen] = useState(false);
 
   const menuItems = [
@@ -37,8 +40,8 @@ export default function Sidebar({ user }: SidebarProps) {
   const filteredItems = menuItems.filter(item => item.roles.includes(user.role));
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    window.location.href = '/login';
+    await fetch(`/api/auth/logout${sid ? `?sid=${sid}` : ''}`, { method: 'POST' });
+    window.location.href = sessionUrl('/login');
   };
 
   return (
@@ -68,7 +71,7 @@ export default function Sidebar({ user }: SidebarProps) {
               return (
                 <Link 
                   key={item.href}
-                  href={item.href}
+                  href={sessionUrl(item.href)}
                   onClick={() => setIsOpen(false)}
                   className={`
                     flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200

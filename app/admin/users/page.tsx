@@ -7,18 +7,23 @@ import {
   Unlock, 
   MoreVertical,
   Mail,
-  Calendar
+  Calendar,
+  Star,
+  Award
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { useSession } from '@/hooks/useSession';
 
 export default function AdminUsers() {
+  const { sid } = useSession();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/users');
+      const q = sid ? `?sid=${sid}` : '';
+      const res = await fetch(`/api/admin/users${q}`);
       const data = await res.json();
       setUsers(data.users || []);
     } catch (e) {
@@ -30,11 +35,12 @@ export default function AdminUsers() {
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [sid]);
 
   const handleUpdate = async (user: any, updates: any) => {
     try {
-      const res = await fetch('/api/admin/users', {
+      const q = sid ? `?sid=${sid}` : '';
+      const res = await fetch(`/api/admin/users${q}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...user, ...updates })
@@ -67,7 +73,8 @@ export default function AdminUsers() {
             <thead>
               <tr className="bg-gray-50/50 border-b border-gray-100">
                 <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Người dùng / Liên hệ</th>
-                <th className="px-6 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Vai trò (Role)</th>
+                 <th className="px-6 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Vai trò (Role)</th>
+                <th className="px-6 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Loyalty (Điểm/Hạng)</th>
                 <th className="px-6 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Ngày tham gia</th>
                 <th className="px-6 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Trạng thái</th>
                 <th className="px-8 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest text-right">Hành động</th>
@@ -103,6 +110,19 @@ export default function AdminUsers() {
                       <option value="manager">Quản lý</option>
                       <option value="admin">Admin</option>
                     </select>
+                  </td>
+                  <td className="px-6 py-5">
+                    <div className="flex flex-col">
+                        <div className="flex items-center gap-1.5 text-xs font-black text-[#800020]">
+                            <Star size={12} fill="currentColor" /> {u.points || 0} <span className="text-[10px] font-bold text-gray-400 uppercase">điểm</span>
+                        </div>
+                        <span className={`text-[9px] font-black uppercase tracking-widest mt-1
+                            ${u.membership_rank === 'Gold' ? 'text-amber-500' : 'text-gray-400'}
+                            ${u.membership_rank === 'Silver' ? 'text-blue-400' : ''}
+                        `}>
+                            {u.membership_rank || 'Bronze'}
+                        </span>
+                    </div>
                   </td>
                   <td className="px-6 py-5">
                     <p className="text-xs text-gray-500 font-medium flex items-center gap-1">

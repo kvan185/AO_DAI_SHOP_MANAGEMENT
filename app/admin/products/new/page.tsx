@@ -1,42 +1,26 @@
 'use client';
+
+import React, { useEffect, useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   ArrowLeft, 
   Save, 
-  Trash2, 
   Plus, 
   X,
   Upload,
   Loader2,
   CheckCircle2,
   AlertCircle,
+  Layers,
+  Image as ImageIcon,
+  Sparkles,
+  Trash2,
   Hash,
   Link as LinkIcon,
-  Image as ImageIcon,
-  Star,
-  Check,
-  ChevronDown,
-  Layers,
-  Sparkles
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { 
-    DndContext, 
-    closestCenter,
-    useSensor,
-    useSensors,
-    PointerSensor,
-    DragEndEvent
-} from '@dnd-kit/core';
-import {
-    arrayMove,
-    SortableContext,
-    rectSortingStrategy,
-    useSortable
-} from '@dnd-kit/sortable';
-import {CSS} from '@dnd-kit/utilities';
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+
 import { useSession } from '@/hooks/useSession';
 
 // --- Skeleton Component ---
@@ -44,103 +28,19 @@ const Skeleton = ({ className }: { className?: string }) => (
   <div className={`animate-pulse bg-gray-200 rounded-xl ${className}`}></div>
 );
 
-// --- Image With Fallback ---
-const ImageWithFallback = ({ src, alt, className, fill, ...props }: any) => {
-  const [error, setError] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  return (
-    <div className={`relative overflow-hidden ${className}`}>
-      {loading && <Skeleton className="absolute inset-0 z-10" />}
-      <Image
-        src={error ? '/no-image.jpg' : src}
-        alt={alt}
-        fill={fill}
-        className={`transition-opacity duration-300 ${loading ? 'opacity-0' : 'opacity-100'}`}
-        onLoadingComplete={() => setLoading(false)}
-        onError={() => {
-            setError(true);
-            setLoading(false);
-        }}
-        {...props}
-      />
-    </div>
-  );
-};
-
-// --- Sortable Image Item ---
-const SortableImage = ({ img, toggleDelete, setPrimaryImage, changingPrimary, pendingDeletions }: any) => {
-    const {
-        attributes,
-        listeners,
-        setNodeRef,
-        transform,
-        transition,
-        isDragging
-    } = useSortable({ id: img.id });
-
-    const style = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        zIndex: isDragging ? 50 : 'auto',
-        opacity: isDragging ? 0.5 : (pendingDeletions.includes(img.id) ? 0.3 : 1)
-    };
-
-    return (
-        <div 
-            ref={setNodeRef} 
-            style={style}
-            {...attributes}
-            className="relative aspect-[3/4] rounded-xl overflow-hidden group border border-gray-100 bg-gray-50 shadow-sm transition-shadow hover:shadow-md"
-        >
-            <ImageWithFallback src={img.image_path} alt="Secondary" fill className="object-cover" />
-            
-            {/* Overlay for actions and drag handle */}
-            <div className="absolute inset-0 bg-black/20 md:bg-black/40 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-end md:justify-center gap-2 p-2 cursor-grab active:cursor-grabbing" {...listeners}>
-                <button 
-                    type="button"
-                    onPointerDown={e => e.stopPropagation()}
-                    onClick={(e) => { e.stopPropagation(); setPrimaryImage(img.id); }}
-                    className="w-full py-2 bg-[#D4AF37] text-white rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1 hover:bg-[#b8952a] shadow-lg active:scale-95 transition-all"
-                >
-                    <Star size={10} fill="currentColor" /> Đặt làm ảnh chính
-                </button>
-                <button 
-                    type="button"
-                    onPointerDown={e => e.stopPropagation()}
-                    onClick={(e) => { e.stopPropagation(); toggleDelete(img.id, false); }}
-                    className="absolute top-2 right-2 p-2 bg-red-500/90 text-white rounded-lg hover:bg-red-600 transition-colors backdrop-blur-md"
-                >
-                    <Trash2 size={12} />
-                </button>
-            </div>
-            
-            {changingPrimary === img.id && (
-                <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-10 text-[#800020]">
-                    <Loader2 size={16} className="animate-spin" />
-                </div>
-            )}
-        </div>
-    );
-};
-
-// --- Product Page ---
-export default function EditProductPage({ params }: { params: { id: string } }) {
+// --- Product Page (Creation) ---
+export default function CreateProductPage() {
   const router = useRouter();
   const { sid, sessionUrl } = useSession();
-  const [images, setImages] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
-  const [changingPrimary, setChangingPrimary] = useState<number | null>(null);
-  const [variants, setVariants] = useState<any[]>([]);
-  const [generatingAI, setGeneratingAI] = useState(false);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   
-  const [pendingDeletions, setPendingDeletions] = useState<number[]>([]);
   const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
   const [newImagePreviews, setNewImagePreviews] = useState<string[]>([]);
+  const [variants, setVariants] = useState<any[]>([]);
+  const [generatingAI, setGeneratingAI] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
@@ -156,37 +56,22 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
   });
 
   useEffect(() => {
-    fetchData();
-  }, [params.id, sid]);
+    fetchCategories();
+  }, [sid]);
 
-  const fetchData = async () => {
+  const fetchCategories = async () => {
     try {
-      const q = sid ? `?sid=${sid}` : '';
-      const [res, catRes] = await Promise.all([
-        fetch(`/api/admin/products/${params.id}${q}`),
-        fetch(`/api/admin/categories${q}`)
-      ]);
-      const data = await res.json();
-      const catData = await catRes.json();
+        const url = sid ? `/api/admin/categories?sid=${sid}` : '/api/admin/categories';
+        const res = await fetch(url);
+        const data = await res.json();
         if (res.ok) {
-        setImages(data.images);
-        setVariants(data.variants || []);
-        setCategories(catData.categories);
-        setFormData({
-          name: data.product.name,
-          sku: data.product.sku || '',
-          slug: data.product.slug || '',
-          category_id: data.product.category_id.toString(),
-          price: data.product.price.toString(),
-          discount_price: data.product.discount_price ? data.product.discount_price.toString() : '',
-          stock: data.product.stock.toString(),
-          description: data.product.description || '',
-          is_active: data.product.is_active.toString()
-        });
-        setIsDirty(false);
-      }
+            setCategories(data.categories);
+            if (data.categories.length > 0 && !formData.category_id) {
+                setFormData(prev => ({ ...prev, category_id: data.categories[0].id.toString() }));
+            }
+        }
     } catch (e) {
-      toast.error('Lỗi khi tải dữ liệu');
+      toast.error('Lỗi khi tải danh mục');
     } finally {
       setLoading(false);
     }
@@ -221,125 +106,6 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
     }
   };
 
-  const setPrimaryImage = async (imgId: number) => {
-    setChangingPrimary(imgId);
-    try {
-        const url = sid ? `/api/admin/products/${params.id}?sid=${sid}` : `/api/admin/products/${params.id}`;
-        const res = await fetch(url, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'set_primary', image_id: imgId })
-        });
-        if (res.ok) {
-            toast.success('Đã thay đổi ảnh chính');
-            fetchData();
-        } else {
-            toast.error('Lỗi khi đặt ảnh chính');
-        }
-    } catch (e) {
-        toast.error('Lỗi kết nối');
-    } finally {
-        setChangingPrimary(null);
-    }
-  };
-
-  const toggleDelete = (id: number, isPrimary: boolean) => {
-    if (isPrimary && images.length > 1) {
-        toast.error('Vui lòng chọn ảnh khác làm ảnh chính trước khi xóa ảnh này');
-        return;
-    }
-    setIsDirty(true);
-    setPendingDeletions(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.name) return toast.error('Vui lòng nhập tên sản phẩm');
-    
-    // Validation cho biến thể
-    for (let i = 0; i < variants.length; i++) {
-        if (!variants[i].size || !variants[i].color) {
-            return toast.error(`Biến thể số ${i + 1} đang thiếu Kích cỡ hoặc Màu sắc`);
-        }
-    }
-    
-    setSaving(true);
-    const fb = new FormData();
-    Object.entries(formData).forEach(([key, value]) => {
-        // Luôn gửi slug và sku ngay cả khi rỗng để cập nhật DB chính xác
-        if (key === 'slug' || key === 'sku') {
-            fb.append(key, value || '');
-        } else if (value !== null && value !== '') {
-            fb.append(key, value);
-        }
-    });
-    
-    if (!formData.discount_price) fb.append('discount_price', 'null');
-    fb.append('delete_image_ids', pendingDeletions.join(','));
-    fb.append('variants', JSON.stringify(variants));
-    newImageFiles.forEach(file => fb.append('new_images', file));
-
-    try {
-      const url = sid ? `/api/admin/products/${params.id}?sid=${sid}` : `/api/admin/products/${params.id}`;
-      const res = await fetch(url, { method: 'PUT', body: fb });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success('Lưu sản phẩm thành công');
-        setIsDirty(false);
-        setNewImageFiles([]);
-        setNewImagePreviews([]);
-        setPendingDeletions([]);
-        fetchData();
-      } else {
-        toast.error(data.message || 'Lỗi khi lưu');
-      }
-    } catch (e) {
-      toast.error('Lỗi hệ thống');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (over && active.id !== over.id) {
-        const oldIndex = images.findIndex(i => i.id === active.id);
-        const newIndex = images.findIndex(i => i.id === over.id);
-        const newImages = arrayMove(images, oldIndex, newIndex);
-        setImages(newImages);
-        setIsDirty(true);
-        
-        // Call API to sync order immediately to avoid inconsistency
-        try {
-            const url = sid ? `/api/admin/products/${params.id}?sid=${sid}` : `/api/admin/products/${params.id}`;
-            await fetch(url, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'reorder', image_ids: newImages.map(img => img.id) })
-            });
-        } catch (e) {
-            toast.error('Lỗi khi đồng bộ thứ tự ảnh');
-        }
-    }
-  };
-
-  const addVariant = () => {
-    setVariants([...variants, { size: '', color: '', stock: 0, price_override: null, sku: '' }]);
-    setIsDirty(true);
-  };
-
-  const removeVariant = (index: number) => {
-    setVariants(variants.filter((_, i) => i !== index));
-    setIsDirty(true);
-  };
-
-  const updateVariant = (index: number, field: string, value: any) => {
-    const newVariants = [...variants];
-    newVariants[index][field] = value;
-    setVariants(newVariants);
-    setIsDirty(true);
-  };
-
   const handleAIGenerate = async () => {
     if (!formData.name) return toast.error('Vui lòng nhập tên sản phẩm để AI có dữ liệu');
     setGeneratingAI(true);
@@ -366,7 +132,70 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
     } catch (e) {
         toast.error('Lỗi khi gọi trợ lý AI');
     } finally {
-        setGeneratingAI(false);
+      setGeneratingAI(false);
+    }
+  };
+
+  const addVariant = () => {
+    setVariants([...variants, { size: '', color: '', stock: 0, price_override: null, sku: '' }]);
+    setIsDirty(true);
+  };
+
+  const removeVariant = (index: number) => {
+    setVariants(variants.filter((_, i) => i !== index));
+    setIsDirty(true);
+  };
+
+  const updateVariant = (index: number, field: string, value: any) => {
+    const newVariants = [...variants];
+    newVariants[index][field] = value;
+    setVariants(newVariants);
+    setIsDirty(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name) return toast.error('Vui lòng nhập tên sản phẩm');
+    if (!formData.price) return toast.error('Vui lòng nhập giá sản phẩm');
+    if (newImageFiles.length === 0) return toast.error('Vui lòng thêm ít nhất một hình ảnh');
+
+    // Validation cho biến thể
+    for (let i = 0; i < variants.length; i++) {
+        if (!variants[i].size || !variants[i].color) {
+            return toast.error(`Biến thể số ${i + 1} đang thiếu Kích cỡ hoặc Màu sắc`);
+        }
+    }
+    
+    setSaving(true);
+    const fb = new FormData();
+    Object.entries(formData).forEach(([key, value]) => {
+        // Luôn gửi slug và sku ngay cả khi rỗng để server xử lý chính xác
+        if (key === 'slug' || key === 'sku') {
+            fb.append(key, value || '');
+        } else if (value !== null && value !== '') {
+            fb.append(key, value);
+        }
+    });
+    
+    if (!formData.discount_price) fb.append('discount_price', 'null');
+    fb.append('variants', JSON.stringify(variants));
+    newImageFiles.forEach(file => fb.append('new_images', file));
+
+    try {
+      const url = sid ? `/api/admin/products?sid=${sid}` : '/api/admin/products';
+      const res = await fetch(url, { method: 'POST', body: fb });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Tạo sản phẩm thành công');
+        setIsDirty(false);
+        router.push(sessionUrl('/admin/products'));
+      } else {
+        toast.error(data.message || 'Lỗi khi lưu');
+      }
+    } catch (e) {
+      toast.error('Lỗi hệ thống');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -385,9 +214,6 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
     </div>
   );
 
-  const primaryImage = images.find(img => img.is_primary === 1) || images[0];
-  const secondaryImages = images.filter(img => img.id !== primaryImage?.id);
-
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20 px-4">
       
@@ -395,18 +221,18 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 sticky top-0 bg-white/80 backdrop-blur-md z-40 py-4 -mx-4 px-4 border-b border-gray-100">
         <div className="space-y-1">
             <button 
-                onClick={() => isDirty ? (window.confirm('Có thay đổi chưa lưu, vẫn muốn rời trang?') && router.push(sessionUrl('/admin/products'))) : router.push(sessionUrl('/admin/products'))} 
+                onClick={() => isDirty ? (window.confirm('Có thay đổi chưa lưu, vẫn muốn rời trang?') && router.back()) : router.back()} 
                 className="flex items-center text-gray-400 hover:text-[#800020] transition-colors font-bold text-xs uppercase tracking-widest gap-2 mb-2 group"
             >
                 <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" /> Quay lại
             </button>
             <div className="flex items-center gap-4">
                 <h1 className="text-3xl font-serif font-black text-[#800020] italic truncate max-w-md">
-                    {formData.name || 'Sản phẩm mới'}
+                    Thêm sản phẩm mới
                 </h1>
                 {isDirty && (
                     <span className="flex items-center gap-1.5 text-[10px] bg-amber-50 text-amber-600 px-3 py-1.5 rounded-full border border-amber-100 font-bold uppercase tracking-wider animate-pulse">
-                        <AlertCircle size={10} /> Chưa lưu
+                        <AlertCircle size={10} /> Đang soạn thảo
                     </span>
                 )}
             </div>
@@ -423,7 +249,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                 `}
             >
                 {saving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
-                LƯU THAY ĐỔI
+                XÁC NHẬN TẠO MỚI
             </button>
         </div>
       </div>
@@ -446,6 +272,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                             className="w-full px-7 py-5 bg-gray-50 border-2 border-transparent focus:border-[#800020]/10 focus:bg-white rounded-2xl outline-none transition-all font-bold text-gray-700 text-lg shadow-inner"
                             value={formData.name}
                             onChange={e => handleInputChange('name', e.target.value)}
+                            placeholder="Nhập tên sản phẩm..."
                         />
                     </div>
 
@@ -459,6 +286,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                                 className="w-full px-6 py-4 bg-gray-50 border-2 border-transparent focus:border-[#D4AF37]/20 focus:bg-white rounded-2xl outline-none transition-all font-mono font-bold text-gray-600"
                                 value={formData.sku}
                                 onChange={e => handleInputChange('sku', e.target.value)}
+                                placeholder="AD-XXXX"
                             />
                         </div>
                         <div className="space-y-2 relative">
@@ -471,6 +299,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                                     className="w-full px-6 py-4 bg-gray-50 border-2 border-transparent focus:border-[#800020]/20 focus:bg-white rounded-2xl outline-none transition-all font-bold text-gray-700 pr-24"
                                     value={formData.slug}
                                     onChange={e => handleInputChange('slug', e.target.value)}
+                                    placeholder="duong-dan-seo"
                                 />
                                 <button 
                                     type="button"
@@ -492,6 +321,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                                     className="w-full pl-7 pr-16 py-5 bg-gray-50 border-2 border-transparent focus:border-[#800020]/20 focus:bg-white rounded-2xl outline-none transition-all font-black text-gray-800 text-xl shadow-inner appearance-none"
                                     value={formData.price}
                                     onChange={e => handleInputChange('price', e.target.value)}
+                                    placeholder="0"
                                 />
                                 <span className="absolute right-7 top-1/2 -translate-y-1/2 text-gray-300 font-black text-lg">₫</span>
                             </div>
@@ -511,6 +341,31 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <div className="bg-white p-10 rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.02)] border border-gray-100">
+                <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-[#800020]/5 rounded-lg text-[#800020]"><AlertCircle size={22} /></div>
+                        <h2 className="text-xl font-serif text-gray-800 font-bold italic">Mô tả sản phẩm</h2>
+                    </div>
+                    <button 
+                        type="button"
+                        onClick={handleAIGenerate}
+                        disabled={generatingAI}
+                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#800020] to-purple-800 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest hover:shadow-lg transition-all active:scale-95 disabled:opacity-50"
+                    >
+                        {generatingAI ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                        Gợi ý bởi AI
+                    </button>
+                </div>
+                <textarea 
+                    rows={8}
+                    className="w-full px-8 py-7 bg-gray-50 border-2 border-transparent focus:border-[#800020]/10 focus:bg-white rounded-[2.5rem] outline-none transition-all font-medium text-gray-600 resize-none leading-relaxed shadow-inner"
+                    value={formData.description}
+                    onChange={e => handleInputChange('description', e.target.value)}
+                    placeholder="Chất liệu, kiểu dáng, ý nghĩa thiết kế..."
+                />
             </div>
 
             {/* VARIANT MANAGEMENT SECTION */}
@@ -610,97 +465,40 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                     <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} accept="image/*" />
                 </div>
 
-                {/* Primary Image Component */}
-                <div className="mb-6">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 block">Ảnh chính (Gallery Cover)</label>
-                    <div className="relative aspect-[3/4] rounded-3xl overflow-hidden ring-4 ring-[#800020]/10 border-4 border-[#800020] group bg-gray-50">
-                        {primaryImage ? (
-                            <>
-                                <ImageWithFallback src={primaryImage.image_path} alt="Primary" fill className="object-cover" />
-                                <div className="absolute top-4 left-4 bg-[#800020] text-[#D4AF37] px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-tighter flex items-center gap-1 shadow-xl">
-                                    <Star size={10} fill="currentColor" /> Ảnh chính
-                                </div>
-                                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-6 opacity-0 group-hover:opacity-100 transition-opacity flex justify-end gap-2">
-                                    <button 
-                                        type="button"
-                                        onClick={() => toggleDelete(primaryImage.id, true)}
-                                        className="p-3 bg-red-500/90 text-white rounded-xl hover:bg-red-600 transition-colors backdrop-blur-md"
-                                    >
-                                        <Trash2 size={18} />
-                                    </button>
-                                </div>
-                            </>
-                        ) : (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-300 border-2 border-dashed border-gray-200 rounded-[2rem]">
-                                <ImageIcon size={48} strokeWidth={1} />
-                                <p className="mt-4 text-xs font-bold font-serif italic">Chưa có ảnh nào</p>
-                            </div>
-                        )}
-                        {changingPrimary === primaryImage?.id && (
-                            <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center z-20">
-                                <Loader2 size={32} className="animate-spin text-[#800020]" />
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Secondary Gallery Grid with Drag-and-Drop */}
                 <div className="space-y-4">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Ảnh bổ sung (Kéo thả để sắp xếp)</label>
-                    
-                    <DndContext 
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={handleDragEnd}
-                    >
-                        <SortableContext 
-                            items={secondaryImages.map(img => img.id)}
-                            strategy={rectSortingStrategy}
-                        >
-                            <div className="grid grid-cols-3 gap-3">
-                                {secondaryImages.map((img) => (
-                                    <SortableImage 
-                                        key={img.id}
-                                        img={img}
-                                        toggleDelete={toggleDelete}
-                                        setPrimaryImage={setPrimaryImage}
-                                        changingPrimary={changingPrimary}
-                                        pendingDeletions={pendingDeletions}
-                                    />
-                                ))}
-                                
-                                {/* New Upload Previews (Not sortable until saved) */}
-                                {newImagePreviews.map((p, i) => (
-                                    <div key={`new-${i}`} className="relative aspect-[3/4] rounded-xl overflow-hidden border-2 border-dashed border-[#D4AF37]/30 bg-amber-50/20">
-                                        <img src={p} className="w-full h-full object-cover opacity-60" alt="New" />
-                                        <div className="absolute inset-0 flex items-center justify-center">
-                                            <Loader2 className="animate-spin text-[#D4AF37]" size={16} />
-                                        </div>
-                                        <button 
-                                            type="button"
-                                            onClick={() => {
-                                                setNewImageFiles(prev => prev.filter((_, idx) => idx !== i));
-                                                setNewImagePreviews(prev => prev.filter((_, idx) => idx !== i));
-                                            }} 
-                                            className="absolute top-1 right-1 p-1 bg-white text-red-500 rounded-md shadow-lg"
-                                        >
-                                            <X size={10} />
-                                        </button>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Tải ảnh lên (Ảnh đầu tiên sẽ là ảnh chính)</label>
+                    <div className="grid grid-cols-2 gap-3">
+                        {newImagePreviews.map((p, i) => (
+                            <div key={`new-${i}`} className={`relative aspect-[3/4] rounded-xl overflow-hidden border-2 ${i === 0 ? 'border-[#800020]' : 'border-dashed border-[#D4AF37]/30'} bg-amber-50/20`}>
+                                <img src={p} className="w-full h-full object-cover" alt="New" />
+                                {i === 0 && (
+                                    <div className="absolute top-1 left-1 bg-[#800020] text-[#D4AF37] px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-tighter">
+                                        Ảnh chính
                                     </div>
-                                ))}
-
-                                {/* Upload Slot */}
+                                )}
                                 <button 
                                     type="button"
-                                    onClick={() => fileInputRef.current?.click()} 
-                                    className="aspect-[3/4] rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-300 hover:text-[#800020] hover:border-[#800020] transition-all bg-gray-50/50 group"
+                                    onClick={() => {
+                                        setNewImageFiles(prev => prev.filter((_, idx) => idx !== i));
+                                        setNewImagePreviews(prev => prev.filter((_, idx) => idx !== i));
+                                    }} 
+                                    className="absolute top-1 right-1 p-1 bg-white text-red-500 rounded-md shadow-lg"
                                 >
-                                    <Upload size={18} className="group-hover:-translate-y-1 transition-transform" />
-                                    <span className="text-[8px] font-bold mt-1 uppercase">Thêm</span>
+                                    <X size={10} />
                                 </button>
                             </div>
-                        </SortableContext>
-                    </DndContext>
+                        ))}
+
+                        {/* Upload Slot */}
+                        <button 
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()} 
+                            className="aspect-[3/4] rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-300 hover:text-[#800020] hover:border-[#800020] transition-all bg-gray-50/50 group"
+                        >
+                            <Upload size={18} className="group-hover:-translate-y-1 transition-transform" />
+                            <span className="text-[8px] font-bold mt-1 uppercase">Thêm ảnh</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -713,6 +511,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                         value={formData.category_id}
                         onChange={e => handleInputChange('category_id', e.target.value)}
                     >
+                        <option value="">Chọn danh mục</option>
                         {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                 </div>
@@ -725,6 +524,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                             className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-[#800020]/10 focus:bg-white rounded-2xl outline-none font-black text-[#800020] shadow-inner"
                             value={formData.stock}
                             onChange={e => handleInputChange('stock', e.target.value)}
+                            placeholder="0"
                         />
                     </div>
                     <div className="space-y-2">

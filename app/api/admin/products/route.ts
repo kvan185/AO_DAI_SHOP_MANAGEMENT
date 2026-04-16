@@ -1,35 +1,28 @@
-import { NextResponse } from 'next/server';
+import { authorize } from '@/lib/auth';
 import pool from '@/lib/db';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'your-secret-key'
-);
-
-async function checkPermission() {
-    const token = cookies().get('auth_token')?.value;
-    if (!token) return false;
-    try {
-        const { payload } = await jwtVerify(token, JWT_SECRET);
-        return ['admin', 'manager'].includes(payload.role as string);
-    } catch {
-        return false;
-    }
-}
+import { NextResponse } from 'next/server';
 
 export async function GET(req: Request) {
-    if (!(await checkPermission())) {
-        return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
-    }
+    const { searchParams } = new URL(req.url);
+    const sid = searchParams.get('sid');
+    const { errorResponse } = await authorize(['admin', 'manager', 'staff'], sid);
+    if (errorResponse) return errorResponse;
+    
     try {
         const { searchParams } = new URL(req.url);
         const search = searchParams.get('search') || '';
         const categoryId = searchParams.get('categoryId');
         
-        let query = 'SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.name LIKE ?';
+        // Joined query to get the primary image path
+        let query = `
+            SELECT p.*, c.name as category_name, pi.image_path 
+            FROM products p 
+            LEFT JOIN categories c ON p.category_id = c.id 
+            LEFT JOIN product_images pi ON p.id = pi.product_id AND pi.is_primary = 1
+            WHERE p.name LIKE ?
+        `;
         const params: any[] = [`%${search}%`];
 
         if (categoryId) {
@@ -42,80 +35,96 @@ export async function GET(req: Request) {
         const [rows]: any = await pool.query(query, params);
         return NextResponse.json({ products: rows });
     } catch (error) {
+        console.error('List Products Error:', error);
         return NextResponse.json({ message: 'Internal Server Error' }, { status: 500 });
     }
 }
 
 export async function POST(req: Request) {
-    if (!(await checkPermission())) {
-        return NextResponse.json({ message: 'Unauthorized' }, { status: 403 });
-    }
+    const { searchParams } = new URL(req.url);
+    const sid = searchParams.get('sid');
+    const { errorResponse } = await authorize(['admin', 'manager', 'staff'], sid);
+    if (errorResponse) return errorResponse;
+
     const connection = await pool.getConnection();
     try {
         const formData = await req.formData();
         const name = formData.get('name') as string;
+        const sku = formData.get('sku') as string;
+        const slug = formData.get('slug') as string;
         const category_id = formData.get('category_id') as string;
-        const price = formData.get('price') as string;
+        const price = parseFloat(formData.get('price') as string || '0');
+        const discount_price_str = formData.get('discount_price') as string;
+        const discount_price = (discount_price_str && discount_price_str !== 'null') ? parseFloat(discount_price_str) : null;
         const description = formData.get('description') as string;
-        const stock = formData.get('stock') as string;
-        const files = formData.getAll('images') as File[]; // Get multiple files
+        const stock = parseInt(formData.get('stock') as string || '0');
+        const is_active = formData.get('is_active') === 'true';
 
-        if (!name || !price || !category_id) {
+        const newImages = formData.getAll('new_images') as File[];
+
+        if (!name || isNaN(price) || !category_id) {
             return NextResponse.json({ message: 'Vui lòng điền đầy đủ các thông tin bắt buộc' }, { status: 400 });
         }
 
         await connection.beginTransaction();
 
-        // 1. Insert product
+        // 1. Insert product (without image_path)
         const [result]: any = await connection.query(
-            'INSERT INTO products (category_id, name, price, description, stock) VALUES (?, ?, ?, ?, ?)',
-            [category_id, name, price, description, stock]
+            'INSERT INTO products (category_id, name, sku, slug, price, discount_price, description, stock, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [category_id, name, sku, slug, price, discount_price, description, stock, is_active]
         );
         const productId = result.insertId;
 
         // 2. Handle multiple image uploads
-        if (files.length > 0) {
+        if (newImages.length > 0) {
             const uploadDir = path.join(process.cwd(), 'public/uploads/products');
             await mkdir(uploadDir, { recursive: true });
 
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
+            for (let i = 0; i < newImages.length; i++) {
+                const file = newImages[i];
                 if (file.size === 0) continue;
 
                 const bytes = await file.arrayBuffer();
                 const buffer = Buffer.from(bytes);
-                const filename = `${Date.now()}-${i}-${file.name.replaceAll(' ', '_')}`;
+                const filename = `${Date.now()}-${i}-${file.name.replace(/\s+/g, '_')}`;
                 const filePath = path.join(uploadDir, filename);
                 const relativePath = `/uploads/products/${filename}`;
                 
                 await writeFile(filePath, buffer);
 
-                // Insert into product_images
-                const isPrimary = i === 0; // First image is primary by default
+                // Insert into product_images (First image is primary by default)
+                const isPrimary = i === 0;
                 await connection.query(
-                    'INSERT INTO product_images (product_id, image_path, is_primary) VALUES (?, ?, ?)',
-                    [productId, relativePath, isPrimary]
+                    'INSERT INTO product_images (product_id, image_path, is_primary, display_order) VALUES (?, ?, ?, ?)',
+                    [productId, relativePath, isPrimary, i]
                 );
-
-                // Update products table for legacy/cover support
-                if (isPrimary) {
-                    await connection.query('UPDATE products SET image_path = ? WHERE id = ?', [relativePath, productId]);
-                }
             }
+        }
+
+        // 3. Handle Variants
+        const variants_str = formData.get('variants') as string;
+        const variants = variants_str ? JSON.parse(variants_str) : [];
+        
+        for (const v of variants) {
+            const variantSku = (v.sku && v.sku.trim() !== '') ? v.sku.trim() : null;
+            await connection.query(
+                'INSERT INTO product_variants (product_id, size, color, sku, stock, price_override) VALUES (?, ?, ?, ?, ?, ?)',
+                [productId, v.size, v.color, variantSku, v.stock || 0, v.price_override || null]
+            );
         }
 
         await connection.commit();
 
         return NextResponse.json({ 
-            message: 'Sản phẩm và bộ sưu tập ảnh đã được tạo thành công', 
+            message: 'Sản phẩm mới đã được tạo thành công', 
             productId 
         }, { status: 201 });
 
     } catch (error: any) {
-        await connection.rollback();
+        if (connection) await connection.rollback();
         console.error('Create Product Error:', error);
-        return NextResponse.json({ message: 'Internal Server Error' }, { status: 500 });
+        return NextResponse.json({ message: 'Lỗi máy chủ: ' + error.message }, { status: 500 });
     } finally {
-        connection.release();
+        if (connection) connection.release();
     }
 }

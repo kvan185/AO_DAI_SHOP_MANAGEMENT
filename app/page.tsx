@@ -4,7 +4,12 @@ import pool from '@/lib/db';
 import ProductCard from '@/components/ProductCard';
 
 async function getProducts() {
-  const [rows]: any = await pool.query('SELECT * FROM products ORDER BY created_at DESC');
+  const [rows]: any = await pool.query(`
+    SELECT p.*, pi.image_path as image_path 
+    FROM products p 
+    LEFT JOIN product_images pi ON p.id = pi.product_id AND pi.is_primary = 1
+    ORDER BY p.created_at DESC
+  `);
   return rows;
 }
 
