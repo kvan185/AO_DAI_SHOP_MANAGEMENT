@@ -1,5 +1,6 @@
 import { authorize } from '@/lib/auth';
 import pool from '@/lib/db';
+import { NextResponse } from 'next/server';
 
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);

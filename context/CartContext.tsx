@@ -2,18 +2,21 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 export interface CartItem {
-  id: number;
+  id: string; // Unique key: productId + variantId
+  productId: number;
   name: string;
   price: number;
   image_path: string;
   quantity: number;
+  size?: string;
+  color?: string;
 }
 
 interface CartContextType {
   cart: CartItem[];
-  addToCart: (product: any) => void;
-  removeFromCart: (productId: number) => void;
-  updateQuantity: (productId: number, quantity: number) => void;
+  addToCart: (product: any, variant?: any, quantity?: number) => void;
+  removeFromCart: (cartItemId: string) => void;
+  updateQuantity: (cartItemId: string, quantity: number) => void;
   clearCart: () => void;
   cartTotal: number;
   itemCount: number;
@@ -41,26 +44,40 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('cart', JSON.stringify(cart));
   }, [cart]);
 
-  const addToCart = (product: any) => {
+  const addToCart = (product: any, variant?: any, quantity: number = 1) => {
     setCart((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
+      const cartItemId = variant ? `${product.id}-${variant.id}` : `${product.id}`;
+      const existing = prev.find((item) => item.id === cartItemId);
+      
       if (existing) {
         return prev.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          item.id === cartItemId ? { ...item, quantity: item.quantity + quantity } : item
         );
       }
-      return [...prev, { ...product, quantity: 1 }];
+
+      const newItem: CartItem = {
+        id: cartItemId,
+        productId: product.id,
+        name: product.name,
+        price: variant?.price_override ? parseFloat(variant.price_override) : parseFloat(product.price),
+        image_path: product.image_path || '/no-image.jpg',
+        quantity,
+        size: variant?.size,
+        color: variant?.color
+      };
+
+      return [...prev, newItem];
     });
   };
 
-  const removeFromCart = (productId: number) => {
-    setCart((prev) => prev.filter((item) => item.id !== productId));
+  const removeFromCart = (cartItemId: string) => {
+    setCart((prev) => prev.filter((item) => item.id !== cartItemId));
   };
 
-  const updateQuantity = (productId: number, quantity: number) => {
+  const updateQuantity = (cartItemId: string, quantity: number) => {
     if (quantity < 1) return;
     setCart((prev) =>
-      prev.map((item) => (item.id === productId ? { ...item, quantity } : item))
+      prev.map((item) => (item.id === cartItemId ? { ...item, quantity } : item))
     );
   };
 

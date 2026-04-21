@@ -16,7 +16,8 @@ import {
     Check,
     ChevronDown,
     Layers,
-    Sparkles
+    Sparkles,
+    FileText
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import {
@@ -49,9 +50,9 @@ const ImageWithFallback = ({ src, alt, className, fill, ...props }: any) => {
     const [error, setError] = useState(false);
 
     return (
-        <div className={`relative overflow-hidden ${className}`}>
+        <div className={`relative overflow-hidden ${fill ? 'w-full h-full' : ''} ${className}`}>
             <Image
-                src={error ? '/no-image.jpg' : src}
+                src={error || !src ? '/no-image.jpg' : src}
                 alt={alt}
                 fill={fill}
                 className="object-cover"
@@ -87,7 +88,7 @@ const SortableImage = ({ img, toggleDelete, setPrimaryImage, changingPrimary, pe
             {...attributes}
             className="relative aspect-[3/4] rounded-xl overflow-hidden group border border-gray-100 bg-gray-50 shadow-sm transition-shadow hover:shadow-md"
         >
-            <ImageWithFallback src={img.image_path} alt="Secondary" fill className="object-cover" />
+            <ImageWithFallback src={img.image_path} alt="Secondary" fill />
 
             {/* Overlay for actions and drag handle */}
             <div className="absolute inset-0 bg-black/20 md:bg-black/40 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-end md:justify-center gap-2 p-2 cursor-grab active:cursor-grabbing" {...listeners}>
@@ -157,25 +158,29 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
         try {
             const q = sid ? `?sid=${sid}` : '';
             const [res, catRes] = await Promise.all([
-                fetch(`/api/admin/products/${params.id}${q}`),
-                fetch(`/api/admin/categories${q}`)
+                fetch(`/api/admin/products/${params.id}${q}&_t=${Date.now()}`),
+                fetch(`/api/admin/categories${q}&_t=${Date.now()}`)
             ]);
             const data = await res.json();
             const catData = await catRes.json();
             if (res.ok) {
-                setImages(data.images);
-                setVariants(data.variants || []);
+                setImages(data.images || []);
+                setVariants((data.variants || []).map((v: any) => ({
+                    ...v,
+                    sku: v.sku || '',
+                    price_override: v.price_override || ''
+                })));
                 setCategories(catData.categories);
                 setFormData({
                     name: data.product.name,
                     sku: data.product.sku || '',
                     slug: data.product.slug || '',
-                    category_id: data.product.category_id.toString(),
-                    price: data.product.price.toString(),
+                    category_id: (data.product.category_id || '').toString(),
+                    price: (data.product.price || '0').toString(),
                     discount_price: data.product.discount_price ? data.product.discount_price.toString() : '',
-                    stock: data.product.stock.toString(),
+                    stock: (data.product.stock || 0).toString(),
                     description: data.product.description || '',
-                    is_active: data.product.is_active.toString()
+                    is_active: data.product.is_active === 1 ? 'true' : 'false'
                 });
                 setIsDirty(false);
             }
@@ -328,9 +333,11 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
     };
 
     const updateVariant = (index: number, field: string, value: any) => {
-        const newVariants = [...variants];
-        newVariants[index][field] = value;
-        setVariants(newVariants);
+        setVariants(prev => {
+            const newVariants = [...prev];
+            newVariants[index] = { ...newVariants[index], [field]: value };
+            return newVariants;
+        });
         setIsDirty(true);
     };
 
@@ -587,6 +594,22 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                             </div>
                         )}
                     </div>
+
+                    {/* DESCRIPTION SECTION */}
+                    <div className="bg-white p-10 rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.02)] border border-gray-100">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="p-2 bg-[#800020]/5 rounded-lg text-[#800020]"><FileText size={22} /></div>
+                            <h2 className="text-xl font-serif text-gray-800 font-bold italic">Mô tả sản phẩm</h2>
+                        </div>
+                        <textarea
+                            id="product-description"
+                            rows={8}
+                            className="w-full px-6 py-4 bg-gray-50 border-2 border-transparent focus:border-[#800020]/10 focus:bg-white rounded-3xl outline-none transition-all text-gray-700 leading-relaxed resize-none"
+                            placeholder="Nhập mô tả chi tiết cho sản phẩm này..."
+                            value={formData.description}
+                            onChange={e => handleInputChange('description', e.target.value)}
+                        />
+                    </div>
                 </div>
 
                 {/* RIGHT COLUMN: Gallery */}
@@ -616,7 +639,6 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                                             fill
                                             priority
                                             sizes="(max-width: 768px) 100vw, 50vw"
-                                            className="object-cover"
                                         />
                                         <div className="absolute top-4 left-4 bg-[#800020] text-[#D4AF37] px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-tighter flex items-center gap-1 shadow-xl">
                                             <Star size={10} fill="currentColor" /> Ảnh chính

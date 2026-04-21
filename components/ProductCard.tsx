@@ -3,9 +3,11 @@ import React from 'react';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { toast } from 'react-hot-toast';
+import { useSession } from '@/hooks/useSession';
 
 export default function ProductCard({ product }: { product: any }) {
   const { addToCart } = useCart();
+  const { sessionUrl } = useSession();
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault(); // Prevent navigating to detail page if button is inside a Link
@@ -15,7 +17,7 @@ export default function ProductCard({ product }: { product: any }) {
 
   return (
     <div className="group bg-white rounded-2xl shadow-md overflow-hidden hover:shadow-2xl transition-all duration-500 flex flex-col h-full border border-gray-100">
-      <Link href={`/product/${product.id}`} className="relative h-80 overflow-hidden">
+      <Link href={sessionUrl(`/product/${product.id}`)} className="relative h-80 overflow-hidden">
         <img 
           src={product.image_path || product.image_url || '/no-image.jpg'} 
           alt={product.name} 
@@ -39,7 +41,7 @@ export default function ProductCard({ product }: { product: any }) {
         
         <div className="mt-auto flex gap-2">
             <Link 
-            href={`/product/${product.id}`}
+            href={sessionUrl(`/product/${product.id}`)}
             className="flex-grow text-center py-2 bg-white border border-[#800020] text-[#800020] rounded-lg text-sm font-bold hover:bg-gray-50 transition-all"
             >
             CHI TIẾT

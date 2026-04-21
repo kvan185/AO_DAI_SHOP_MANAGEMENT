@@ -4,12 +4,14 @@ import pool from '@/lib/db';
 import ProductCard from '@/components/ProductCard';
 
 async function getProducts() {
+  const limit = parseInt(process.env.ITEMS_PER_PAGE || '12');
   const [rows]: any = await pool.query(`
     SELECT p.*, pi.image_path as image_path 
     FROM products p 
     LEFT JOIN product_images pi ON p.id = pi.product_id AND pi.is_primary = 1
     ORDER BY p.created_at DESC
-  `);
+    LIMIT ?
+  `, [limit]);
   return rows;
 }
 
@@ -37,7 +39,7 @@ export default async function HomePage() {
         <h2 className="text-4xl font-serif text-[#800020] text-center mb-4 uppercase tracking-widest">Bộ Sưu Tập Áo Dài</h2>
         <div className="w-24 h-1 bg-[#D4AF37] mx-auto mb-16"></div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-${process.env.ITEMS_PER_ROW || '4'} gap-8`}>
           {products.map((product: any) => (
             <ProductCard key={product.id} product={product} />
           ))}

@@ -1,7 +1,10 @@
 'use client';
 import React, { useEffect, useState } from 'react';
+import { useSession } from '@/hooks/useSession';
+import Link from 'next/link';
 
 export default function ProfilePage() {
+  const { sid, sessionUrl } = useSession();
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -16,18 +19,20 @@ export default function ProfilePage() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const res = await fetch('/api/auth/session');
+        const sessionUrlStr = sid ? `/api/auth/session?sid=${sid}` : '/api/auth/session';
+        const res = await fetch(sessionUrlStr);
         const session = await res.json();
         
         if (session.authenticated) {
           // Now fetch full profile data including phone, address
-          const fullRes = await fetch('/api/auth/profile');
+          const profileUrlStr = sid ? `/api/auth/profile?sid=${sid}` : '/api/auth/profile';
+          const fullRes = await fetch(profileUrlStr);
           const fullData = await fullRes.json();
           if (fullRes.ok) {
             setFormData(fullData.profile);
           }
         } else {
-          window.location.href = '/login';
+          window.location.href = sessionUrl('/login');
         }
       } catch (err) {
         console.error('Failed to fetch profile');
@@ -36,7 +41,7 @@ export default function ProfilePage() {
       }
     };
     fetchProfile();
-  }, []);
+  }, [sid]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,7 +49,8 @@ export default function ProfilePage() {
     setMessage({ type: '', text: '' });
 
     try {
-      const res = await fetch('/api/auth/profile', {
+      const profileUrlStr = sid ? `/api/auth/profile?sid=${sid}` : '/api/auth/profile';
+      const res = await fetch(profileUrlStr, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -88,7 +94,7 @@ export default function ProfilePage() {
           
           <nav className="space-y-4">
             <button className="w-full text-left px-4 py-3 rounded-xl bg-white/10 font-semibold border-l-4 border-[#D4AF37]">Thông tin cá nhân</button>
-            <a href="/orders/history" className="block w-full text-left px-4 py-3 rounded-xl hover:bg-white/5 transition-all opacity-80">Lịch sử đơn hàng</a>
+            <Link href={sessionUrl("/orders/history")} className="block w-full text-left px-4 py-3 rounded-xl hover:bg-white/5 transition-all opacity-80">Lịch sử đơn hàng</Link>
           </nav>
         </div>
 

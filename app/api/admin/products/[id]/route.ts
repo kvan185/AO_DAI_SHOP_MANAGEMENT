@@ -59,7 +59,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         const is_active = formData.get('is_active') === 'true';
         const variants_str = formData.get('variants') as string;
         const variants = variants_str ? JSON.parse(variants_str) : [];
-        
+
         // --- Server-side Validation ---
         if (!name || name.trim() === '') {
             return NextResponse.json({ message: 'Tên sản phẩm không được để trống' }, { status: 400 });

@@ -3,32 +3,49 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
+  --primary: #800020;    /* Burgundy */
+  --secondary: #D4AF37;  /* Gold */
+  --accent: #F9F6F0;     /* Cream/Off-white */
+  --text-dark: #1A1A1A;
+  --text-light: #5F5F5F;
+  
+  --foreground-rgb: 26, 26, 26;
+  --background-start-rgb: 249, 246, 240;
   --background-end-rgb: 255, 255, 255;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
-  }
+body {
+  font-family: var(--font-outfit), sans-serif;
+  color: rgb(var(--foreground-rgb));
+  background: white;
+  min-height: 100vh;
 }
 
-body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+h1, h2, h3, h4, h5, h6, .font-serif {
+  font-family: var(--font-playfair), serif;
+}
+
+.font-sans {
+  font-family: var(--font-outfit), sans-serif;
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
+}
+
+/* Custom Scrollbar for Luxury Feel */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f9f6f0;
+}
+::-webkit-scrollbar-thumb {
+  background: #80002020;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #80002040;
 }
