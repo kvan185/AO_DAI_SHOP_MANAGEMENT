@@ -1,6 +1,7 @@
 import { authorize } from '@/lib/auth';
 import pool from '@/lib/db';
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile } from 'fs/promises';
+import { slugify, ensureDir } from '@/lib/fileUtils';
 import path from 'path';
 import { NextResponse } from 'next/server';
 
@@ -77,8 +78,16 @@ export async function POST(req: Request) {
 
         // 2. Handle multiple image uploads
         if (newImages.length > 0) {
-            const uploadDir = path.join(process.cwd(), 'public/uploads/products');
-            await mkdir(uploadDir, { recursive: true });
+            // Lấy tên danh mục để định danh thư mục
+            const [catRows]: any = await connection.query('SELECT name FROM categories WHERE id = ?', [category_id]);
+            const categoryName = catRows.length > 0 ? catRows[0].name : 'unknown';
+            
+            const catSlug = slugify(categoryName);
+            const prodSlug = slugify(name);
+            const relativeDir = `/uploads/products/${catSlug}/${prodSlug}`;
+            const uploadDir = path.join(process.cwd(), 'public', relativeDir);
+            
+            await ensureDir(uploadDir);
 
             for (let i = 0; i < newImages.length; i++) {
                 const file = newImages[i];
@@ -88,7 +97,7 @@ export async function POST(req: Request) {
                 const buffer = Buffer.from(bytes);
                 const filename = `${Date.now()}-${i}-${file.name.replace(/\s+/g, '_')}`;
                 const filePath = path.join(uploadDir, filename);
-                const relativePath = `/uploads/products/${filename}`;
+                const relativePath = `${relativeDir}/${filename}`;
                 
                 await writeFile(filePath, buffer);
 

@@ -6,10 +6,10 @@ USE shop_ao_dai;
 
 -- 1. Dữ liệu cho bảng Users (Mật khẩu mặc định: '123456' đã Hash bằng bcrypt)
 INSERT INTO users (username, password, email, fullname, role) VALUES
-('admin', '$2b$10$X7.W3I7O5I7O5I7O5I7O5e0zYp.y/SjB.f.o.G/SjB.f.o.G', 'admin@aodai.com', 'Quản trị hệ thống', 'admin'),
-('manager1', '$2b$10$X7.W3I7O5I7O5I7O5I7O5e0zYp.y/SjB.f.o.G/SjB.f.o.G', 'manager@aodai.com', 'Quản lý cửa hàng', 'manager'),
-('staff1', '$2b$10$X7.W3I7O5I7O5I7O5I7O5e0zYp.y/SjB.f.o.G/SjB.f.o.G', 'staff@aodai.com', 'Nhân viên bán hàng', 'staff'),
-('customer1', '$2b$10$X7.W3I7O5I7O5I7O5I7O5e0zYp.y/SjB.f.o.G/SjB.f.o.G', 'khachhang@gmail.com', 'Nguyễn Văn Khách', 'customer');
+('admin', '$2b$10$7GjhX5usioEs92622Jz3cOuIugp3sFVKgrx8rpXL4rwIcJp0GkAMm', 'admin@aodai.com', 'Quản trị hệ thống', 'admin'),
+('manager1', '$2b$10$7GjhX5usioEs92622Jz3cOuIugp3sFVKgrx8rpXL4rwIcJp0GkAMm', 'manager@aodai.com', 'Quản lý cửa hàng', 'manager'),
+('staff1', '$2b$10$7GjhX5usioEs92622Jz3cOuIugp3sFVKgrx8rpXL4rwIcJp0GkAMm', 'staff@aodai.com', 'Nhân viên bán hàng', 'staff'),
+('customer1', '$2b$10$7GjhX5usioEs92622Jz3cOuIugp3sFVKgrx8rpXL4rwIcJp0GkAMm', 'khachhang@gmail.com', 'Nguyễn Văn Khách', 'customer');
 
 -- 2. Dữ liệu cho bảng Categories (Danh mục Áo Dài)
 INSERT INTO categories (name, slug, description) VALUES

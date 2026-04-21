@@ -12,6 +12,8 @@ const nextConfig = {
         // Allow local uploads
         unoptimized: true, 
     },
+    // Disable font optimization to prevent download errors in restricted network
+    optimizeFonts: false,
 };
 
 export default nextConfig;

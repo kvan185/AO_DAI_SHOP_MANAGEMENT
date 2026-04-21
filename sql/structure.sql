@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
     phone VARCHAR(20),
     address TEXT,
     role ENUM('admin', 'manager', 'staff', 'customer') DEFAULT 'customer',
+    avatar VARCHAR(255) DEFAULT NULL,
     is_locked BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
